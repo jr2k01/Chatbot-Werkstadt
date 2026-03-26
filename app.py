@@ -6,7 +6,6 @@ from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 import PyPDF2
 
-#
 # NEUER Code für GitHub Secrets (und lokale Entwicklung, wenn Variable gesetzt)
 import os
 import streamlit as st # Streamlit muss für st.secrets importiert sein
