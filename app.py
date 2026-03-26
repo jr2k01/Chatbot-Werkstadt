@@ -102,6 +102,35 @@ if 'uploaded_docs' not in st.session_state:
 # --- 4. AUFBAU DER STREAMLIT-OBERFLÄCHE ---
 
 st.title("🛡️ Dein Assistent für den Pflegegrad-Widerspruch")
+
+# Definiere den CSS-Stil für den Hinweis-Banner
+st.markdown("""
+<style>
+.disclaimer-box {
+    background-color: #FFF3CD; /* Helle Warnfarbe, passend zum Bootstrap-Stil von Streamlit */
+    color: #664D03; /* Dunkler Text für Lesbarkeit */
+    border: 1px solid #FFECB5;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem; /* Abstand zum nächsten Element */
+    text-align: center;
+    font-size: 0.9rem;
+}
+.disclaimer-box a {
+    color: #0d6efd; /* Standard-Linkfarbe für bessere Sichtbarkeit */
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Erstelle den Container und fülle ihn mit dem Hinweis
+with st.container():
+    st.markdown("""
+    <div class="disclaimer-box">
+        <strong>Wichtiger Hinweis:</strong> Dieser Assistent bietet allgemeine Informationen und Unterstützung. Er stellt <strong>keine Rechtsberatung</strong> dar und kann die individuelle Beratung durch einen Anwalt oder eine spezialisierte Beratungsstelle (z.B. VdK, SoVD) nicht ersetzen.
+    </div>
+    """, unsafe_allow_html=True)
+    
 st.markdown("Wir führen dich Schritt für Schritt durch den Prozess. Einfach, klar und strukturiert.")
 
 # --- ANSICHT 1: STARTBILDSCHIRM ---
