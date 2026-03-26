@@ -302,3 +302,5 @@ else:
             
             # KI-Antwort zum Verlauf hinzufügen
             st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+#wasläuftwasöäuft
