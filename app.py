@@ -135,16 +135,21 @@ if not st.session_state.process_started:
 # --- ANSICHT 2: HAUPTANSICHT NACH PROZESSSTART ---
 else:
     # --- Linke Seitenleiste ---
-    with st.sidebar:
+     with st.sidebar:
         st.header("Dein Status")
+        
         fristen = get_fristen_info(st.session_state.ablehnungsdatum)
         st.write(f"Bescheid vom: **{st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}**")
         
         widerspruchsfrist_ende = fristen.get("Widerspruchsfrist endet am")
         if widerspruchsfrist_ende:
             tage_verbleibend = (widerspruchsfrist_ende - datetime.date.today()).days
-            st.metric(label="Tage bis Fristende für Widerspruch", value=f"{tage_verbleibend} Tage", delta=f"Endet am {widerspruchsfrist_ende.strftime('%d.%m.%Y')}", delta_color="inverse")
-        
+            st.metric(
+                label="Tage bis Fristende für Widerspruch",
+                value=f"{tage_verbleibend} Tage",
+                delta=f"Frist endet am {widerspruchsfrist_ende.strftime('%d.%m.%Y')}",
+                delta_color="inverse" if tage_verbleibend > 10 else ("off" if tage_verbleibend <= 0 else "normal")
+            )
         st.divider()
         st.header("Dokumente verwalten")
         uploaded_file = st.file_uploader("Lade Dokumente hoch (PDF)", type="pdf")
@@ -170,17 +175,47 @@ else:
     with tab1:
         st.header("Schritt-für-Schritt durch den Widerspruch")
         st.markdown("""
-        - **Schritt 1:** Fristwahrender Widerspruch (SOFORT)
-        - **Schritt 2:** Unterlagen sammeln (Ärzte, Pflegetagebuch)
-        - **Schritt 3:** Begründung formulieren (Hilfe von Tabs 3 & 5)
-        - **Schritt 4:** Begründung per Einschreiben abschicken
-        """)
+        Hier ist dein Fahrplan. Arbeite die Punkte nacheinander ab.
+        
+        - **Schritt 1: Fristwahrender Widerspruch (SOFORT)**
+        - **Was?** Ein kurzes Schreiben an die Pflegekasse, in dem du formlos mitteilst: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum des Bescheids] ein. Eine ausführliche Begründung reiche ich nach."
+        - **Warum?** Damit verpasst du die wichtige 1-Monats-Frist nicht!
+        - **Erledigt?**
+            
+        - **Schritt 2: Unterlagen sammeln (ca. 1-2 Wochen)**
+        - **Was?** Sammle alle relevanten Dokumente:
+        - Ärztliche Atteste, Berichte, Gutachten
+        - Pflegetagebuch (sehr wichtig!)
+        - Liste der benötigten Hilfsmittel
+        - **Tipp:** Lade die Dokumente hier in der App hoch, um sie vom Chatbot analysieren zu lassen.
+        - **Erledigt?**
+            
+        - **Schritt 3: Begründung formulieren (ca. 1 Woche)**
+        - **Was?** Schreibe die ausführliche Begründung für deinen Widerspruch. Beschreibe genau, warum die Ablehnung oder die Einstufung falsch ist.
+        - **Hilfe:** Nutze den Chat-Assistenten! Frage z.B.: "Hilf mir, eine Begründung zu formulieren. Mein Pflegetagebuch zeigt, dass ich Hilfe beim Anziehen brauche."
+        - **Erledigt?**
+    
+        - **Schritt 4: Begründung abschicken**
+        - **Was?** Schicke die ausführliche Begründung per Einschreiben an die Pflegekasse.
+        - **Wichtig:** Hebe den Sendebeleg gut auf!
+        - **Erledigt?**
+    """)
 
     with tab2:
         st.header("Dein Fristenkalender")
+        calendar_events = []
         fristen = get_fristen_info(st.session_state.ablehnungsdatum)
-        calendar_events = [{"title": name, "start": datum.isoformat(), "end": datum.isoformat(), "allDay": True, "color": "red" if "endet" in name else "orange"} for name, datum in fristen.items()]
-        calendar(events=calendar_events, options={"initialView": "dayGridMonth"})
+        for name, datum in fristen.items():
+            calendar_events.append({
+                "title": name, "start": datum.isoformat(), "end": datum.isoformat(),
+                "allDay": True, "color": "red" if "endet" in name else "orange"
+            })
+        calendar_options = {
+            "headerToolbar": {"left": "today prev,next", "center": "title", "right": "dayGridMonth,timeGridWeek"},
+            "initialDate": st.session_state.ablehnungsdatum.isoformat(),
+            "initialView": "dayGridMonth"
+        }
+        calendar(events=calendar_events, options=calendar_options)
 
     with tab3:
         st.header("Dein persönlicher Chat-Assistent")
@@ -200,16 +235,28 @@ else:
             st.session_state.chat_history.append({"role": "assistant", "content": response})
 
     with tab4:
-        st.header("Pflegegrad-Rechner (Externer Service)")
-        st.warning("Der Pflegegrad-Rechner von pflegehilfe.org kann aus Sicherheitsgründen nicht direkt eingebettet werden. Du kannst ihn aber über den folgenden Link in einem neuen Browser-Tab öffnen.")
-        rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
-        st.markdown(f'''
-        <a href="{rechner_url}" target="_blank" style="display: inline-block; padding: 1em 2em; background-color: #0068c9; color: white; text-align: center; text-decoration: none; border-radius: 0.5rem; font-size: 1.1em; font-weight: bold; margin-top: 1em;">
-            Zum Pflegegrad-Rechner wechseln
-        </a>
-        ''', unsafe_allow_html=True)
-        st.info("Klicke auf den Button, fülle die Fragen auf der externen Seite aus und komm hierher zurück, um mit den Informationen weiterzuarbeiten.")
+            st.header("Pflegegrad-Rechner (Externer Service)")
+            st.warning(
+                "Der Pflegegrad-Rechner von pflegehilfe.org kann aus Sicherheitsgründen nicht direkt in diese App "
+                "eingebettet werden. Du kannst ihn aber über den folgenden Link in einem neuen Browser-Tab öffnen."
+            )
     
+            rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
+    
+            # Ein großer, klickbarer Button/Link
+            st.markdown(f'''
+            <a href="{rechner_url}" target="_blank" style="display: inline-block; padding: 1em 2em; background-color: #0068c9; color: white; text-align: center; text-decoration: none; border-radius: 0.5rem; font-size: 1.1em; font-weight: bold; margin-top: 1em;">
+                Zum Pflegegrad-Rechner wechseln
+            </a>
+            ''', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            st.info(
+                "**Anleitung:**\n"
+                "1. Klicke auf den Button, um den Rechner zu öffnen.\n"
+                "2. Fülle die Fragen auf der externen Seite aus.\n"
+                "3. Komm hierher zurück, um mit den Informationen weiterzuarbeiten."
+            )
     with tab5:
         st.header("📝 Formulierungshilfe für deine Widerspruchsbegründung")
         st.info("Nutze diese Bausteine und den Generator, um eine starke und persönliche Begründung zu erstellen.")
