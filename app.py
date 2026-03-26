@@ -198,16 +198,31 @@ else:
     with tab1:
         st.header("Schritt-für-Schritt durch den Widerspruch")
         st.markdown("""
-        Hier ist dein Fahrplan:
+        Hier ist dein Fahrplan. Arbeite die Punkte nacheinander ab.
+        
         - **Schritt 1: Fristwahrender Widerspruch (SOFORT)**
-          - **Was?** Kurzes Schreiben: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum] ein. Begründung folgt."
-        - **Schritt 2: Unterlagen sammeln (1-2 Wochen)**
-          - **Was?** Ärztliche Atteste, Berichte, Pflegetagebuch.
+        - **Was?** Ein kurzes Schreiben an die Pflegekasse, in dem du formlos mitteilst: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum des Bescheids] ein. Eine ausführliche Begründung reiche ich nach."
+        - **Warum?** Damit verpasst du die wichtige 1-Monats-Frist nicht!
+        - **Erledigt?**
+            
+        - **Schritt 2: Unterlagen sammeln (ca. 1-2 Wochen)**
+        - **Was?** Sammle alle relevanten Dokumente:
+        - Ärztliche Atteste, Berichte, Gutachten
+        - Pflegetagebuch (sehr wichtig!)
+        - Liste der benötigten Hilfsmittel
+        - **Tipp:** Lade die Dokumente hier in der App hoch, um sie vom Chatbot analysieren zu lassen.
+        - **Erledigt?**
+            
         - **Schritt 3: Begründung formulieren (ca. 1 Woche)**
-          - **Hilfe:** Nutze den Chat-Assistenten!
+        - **Was?** Schreibe die ausführliche Begründung für deinen Widerspruch. Beschreibe genau, warum die Ablehnung oder die Einstufung falsch ist.
+        - **Hilfe:** Nutze den Chat-Assistenten! Frage z.B.: "Hilf mir, eine Begründung zu formulieren. Mein Pflegetagebuch zeigt, dass ich Hilfe beim Anziehen brauche."
+        - **Erledigt?**
+    
         - **Schritt 4: Begründung abschicken**
-          - **Wichtig:** Per Einschreiben!
-        """)
+        - **Was?** Schicke die ausführliche Begründung per Einschreiben an die Pflegekasse.
+        - **Wichtig:** Hebe den Sendebeleg gut auf!
+        - **Erledigt?**
+    """)
     
     with tab2:
         st.header("Dein Fristenkalender")
