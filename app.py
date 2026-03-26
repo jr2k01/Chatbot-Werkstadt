@@ -121,16 +121,26 @@ st.markdown("Wir führen dich Schritt für Schritt durch den Prozess. Einfach, k
 # --- ANSICHT 1: STARTBILDSCHIRM ---
 if not st.session_state.process_started:
     st.header("Schritt 1: Prozess starten und Fristen setzen")
-    st.info("Der Widerspruch muss in der Regel **innerhalb eines Monats** nach Erhalt des Ablehnungsbescheids bei der Pflegekasse eingehen.")
+    st.info(
+        "Der Widerspruch muss in der Regel **innerhalb eines Monats** nach Erhalt des "
+        "Ablehnungsbescheids bei der Pflegekasse eingehen. Trage hier das Datum ein."
+    )
     
-    selected_date = st.date_input("Datum des Ablehnungsbescheids:", value=None, help="Wähle das Datum, an dem du den Brief von der Pflegekasse erhalten hast.")
+    selected_date = st.date_input(
+        "Datum des Ablehnungsbescheids:",
+        value=None,
+        min_value=datetime.date.today() - datetime.timedelta(days=365),
+        max_value=datetime.date.today(),
+        help="Wähle das Datum, an dem du den Brief von der Pflegekasse erhalten hast."
+    )
+
     if st.button("Prozess starten", type="primary"):
         if selected_date:
             st.session_state.ablehnungsdatum = selected_date
             st.session_state.process_started = True
             st.rerun()
         else:
-            st.warning("Bitte wähle zuerst das Datum aus.")
+            st.warning("Bitte wähle zuerst das Datum des Ablehnungsbescheids aus.")
 
 # --- ANSICHT 2: HAUPTANSICHT NACH PROZESSSTART ---
 else:
@@ -234,7 +244,7 @@ else:
                     st.markdown(response)
             st.session_state.chat_history.append({"role": "assistant", "content": response})
 
-    with tab4:
+        with tab4:
             st.header("Pflegegrad-Rechner (Externer Service)")
             st.warning(
                 "Der Pflegegrad-Rechner von pflegehilfe.org kann aus Sicherheitsgründen nicht direkt in diese App "
@@ -257,106 +267,108 @@ else:
                 "2. Fülle die Fragen auf der externen Seite aus.\n"
                 "3. Komm hierher zurück, um mit den Informationen weiterzuarbeiten."
             )
-    with tab5:
-        st.header("📝 Formulierungshilfe für deine Widerspruchsbegründung")
-        st.info("Nutze diese Bausteine und den Generator, um eine starke und persönliche Begründung zu erstellen.")
-
-        st.subheader("1. Vorlage für den fristwahrenden Widerspruch")
-        st.markdown("Dies ist der erste, kurze Widerspruch, den du sofort abschickst.")
+         
+        with tab5:
+                st.header("📝 Formulierungshilfe für deine Widerspruchsbegründung")
+                st.info("Nutze diese Bausteine und den Generator, um eine starke und persönliche Begründung zu erstellen.")
         
-        frist_widerspruch_text = f"""
-        **[Dein Name]**
-        **[Deine Adresse]**
-        **[Deine Versichertennummer]**
-
-        An die
-        **[Name deiner Pflegekasse]**
-        **[Adresse deiner Pflegekasse]**
-
-        **Datum: {datetime.date.today().strftime('%d.%m.%Y')}**
-
-        **Betreff: Widerspruch gegen den Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}, Aktenzeichen/Versichertennummer: [Dein Aktenzeichen]**
-
-        Sehr geehrte Damen und Herren,
-
-        hiermit lege ich gegen den oben genannten Bescheid fristwahrend Widerspruch ein.
-
-        Eine ausführliche Begründung werde ich Ihnen in Kürze nachreichen.
-
-        Ich bitte um eine schriftliche Bestätigung über den Eingang dieses Widerspruchs.
-
-        Mit freundlichen Grüßen
-
-
-        ________________________
-        (Unterschrift)
-        """
-        st.code(frist_widerspruch_text, language="text")
-        st.download_button("Vorlage herunterladen (.txt)", frist_widerspruch_text, file_name="fristwahrender_widerspruch.txt")
-        
-        st.divider()
-
-        st.subheader("2. Generator für die ausführliche Begründung")
-        st.markdown("Beschreibe hier in Stichpunkten, was deiner Meinung nach im Gutachten falsch bewertet wurde. Der Generator erstellt daraus einen ausformulierten Text.")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("**Beispiele für deine Stichpunkte:**")
-            st.markdown(
-                "- *Hilfe beim Anziehen wird täglich benötigt, nicht nur 2x pro Woche.*\n"
-                "- *Treppensteigen ist ohne Hilfe gar nicht mehr möglich.*\n"
-                "- *Nachts muss ich mehrmals auf die Toilette begleitet werden, das wurde nicht berücksichtigt.*\n"
-                "- *Die psychische Belastung wurde ignoriert.*"
-            )
-
-        with col2:
-            user_reasons = st.text_area(
-                "Deine Gründe in Stichpunkten (einer pro Zeile):",
-                height=200,
-                placeholder="z.B. Tägliche Hilfe beim Duschen nötig\nKann Mahlzeiten nicht selbst zubereiten\n..."
-            )
-
-        if st.button("Begründungstext erstellen", type="primary"):
-            if user_reasons:
-                reasons_list = [f"- {reason.strip()}" for reason in user_reasons.split('\n') if reason.strip()]
-                reasons_formatted = "\n".join(reasons_list)
-
-                begruendung_text = f"""
+                st.subheader("1. Vorlage für den fristwahrenden Widerspruch")
+                st.markdown("Dies ist der erste, kurze Widerspruch, den du sofort abschickst.")
+                
+                frist_widerspruch_text = f"""
                 **[Dein Name]**
                 **[Deine Adresse]**
-
+                **[Deine Versichertennummer]**
+        
                 An die
                 **[Name deiner Pflegekasse]**
                 **[Adresse deiner Pflegekasse]**
-
+        
                 **Datum: {datetime.date.today().strftime('%d.%m.%Y')}**
-
-                **Betreff: Begründung zum Widerspruch vom [Datum des ersten Schreibens], Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}**
-
+        
+                **Betreff: Widerspruch gegen den Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}, Aktenzeichen/Versichertennummer: [Dein Aktenzeichen]**
+        
                 Sehr geehrte Damen und Herren,
-
-                bezugnehmend auf meinen Widerspruch vom [Datum des ersten Schreibens] möchte ich diesen wie folgt begründen:
-
-                Die im MDK-Gutachten getroffenen Feststellungen spiegeln meinen tatsächlichen Pflege- und Unterstützungsbedarf nur unzureichend wider. Insbesondere in den folgenden Punkten weicht meine Alltagssituation erheblich von der Darstellung im Gutachten ab:
-
-                {reasons_formatted}
-
-                Diese Punkte zeigen, dass meine Selbstständigkeit weitaus stärker eingeschränkt ist, als im Gutachten angenommen wurde. Der tatsächliche tägliche Hilfebedarf rechtfertigt eine Einstufung in einen höheren Pflegegrad.
-
-                Zur weiteren Untermauerung meiner Angaben lege ich [z.B. ein aktuelles Pflegetagebuch / einen Arztbericht von Dr. Mustermann] bei.
-
-                Ich bitte Sie daher, Ihre Entscheidung auf Basis dieser ergänzenden Informationen erneut zu prüfen und den Pflegegrad entsprechend anzupassen. Für eine erneute Begutachtung stehe ich selbstverständlich zur Verfügung.
-
+        
+                hiermit lege ich gegen den oben genannten Bescheid fristwahrend Widerspruch ein.
+        
+                Eine ausführliche Begründung werde ich Ihnen in Kürze nachreichen.
+        
+                Ich bitte um eine schriftliche Bestätigung über den Eingang dieses Widerspruchs.
+        
                 Mit freundlichen Grüßen
-
-
+        
+        
                 ________________________
                 (Unterschrift)
                 """
-                st.subheader("Deine generierte Begründung")
-                st.code(begruendung_text, language="text")
-                st.download_button("Begründung herunterladen (.txt)", begruendung_text, file_name="widerspruch_begruendung.txt")
-            else:
-                st.warning("Bitte gib zuerst deine Gründe in das Textfeld ein.")
+                st.code(frist_widerspruch_text, language="text")
+                st.download_button("Vorlage herunterladen (.txt)", frist_widerspruch_text, file_name="fristwahrender_widerspruch.txt")
+                
+                st.divider()
+        
+                st.subheader("2. Generator für die ausführliche Begründung")
+                st.markdown("Beschreibe hier in Stichpunkten, was deiner Meinung nach im Gutachten falsch bewertet wurde. Der Generator erstellt daraus einen ausformulierten Text.")
+        
+                col1, col2 = st.columns(2)
+        
+                with col1:
+                    st.markdown("**Beispiele für deine Stichpunkte:**")
+                    st.markdown(
+                        "- *Hilfe beim Anziehen wird täglich benötigt, nicht nur 2x pro Woche.*\n"
+                        "- *Treppensteigen ist ohne Hilfe gar nicht mehr möglich.*\n"
+                        "- *Nachts muss ich mehrmals auf die Toilette begleitet werden, das wurde nicht berücksichtigt.*\n"
+                        "- *Die psychische Belastung wurde ignoriert.*"
+                    )
+        
+                with col2:
+                    user_reasons = st.text_area(
+                        "Deine Gründe in Stichpunkten (einer pro Zeile):",
+                        height=200,
+                        placeholder="z.B. Tägliche Hilfe beim Duschen nötig\nKann Mahlzeiten nicht selbst zubereiten\n..."
+                    )
+        
+                if st.button("Begründungstext erstellen", type="primary"):
+                    if user_reasons:
+                        reasons_list = [f"- {reason.strip()}" for reason in user_reasons.split('\n') if reason.strip()]
+                        reasons_formatted = "\n".join(reasons_list)
+        
+                        begruendung_text = f"""
+                        **[Dein Name]**
+                        **[Deine Adresse]**
+        
+                        An die
+                        **[Name deiner Pflegekasse]**
+                        **[Adresse deiner Pflegekasse]**
+        
+                        **Datum: {datetime.date.today().strftime('%d.%m.%Y')}**
+        
+                        **Betreff: Begründung zum Widerspruch vom [Datum des ersten Schreibens], Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}**
+        
+                        Sehr geehrte Damen und Herren,
+        
+                        bezugnehmend auf meinen Widerspruch vom [Datum des ersten Schreibens] möchte ich diesen wie folgt begründen:
+        
+                        Die im MDK-Gutachten getroffenen Feststellungen spiegeln meinen tatsächlichen Pflege- und Unterstützungsbedarf nur unzureichend wider. Insbesondere in den folgenden Punkten weicht meine Alltagssituation erheblich von der Darstellung im Gutachten ab:
+        
+                        {reasons_formatted}
+        
+                        Diese Punkte zeigen, dass meine Selbstständigkeit weitaus stärker eingeschränkt ist, als im Gutachten angenommen wurde. Der tatsächliche tägliche Hilfebedarf rechtfertigt eine Einstufung in einen höheren Pflegegrad.
+        
+                        Zur weiteren Untermauerung meiner Angaben lege ich [z.B. ein aktuelles Pflegetagebuch / einen Arztbericht von Dr. Mustermann] bei.
+        
+                        Ich bitte Sie daher, Ihre Entscheidung auf Basis dieser ergänzenden Informationen erneut zu prüfen und den Pflegegrad entsprechend anzupassen. Für eine erneute Begutachtung stehe ich selbstverständlich zur Verfügung.
+        
+                        Mit freundlichen Grüßen
+        
+        
+                        ________________________
+                        (Unterschrift)
+                        """
+                        st.subheader("Deine generierte Begründung")
+                        st.code(begruendung_text, language="text")
+                        st.download_button("Begründung herunterladen (.txt)", begruendung_text, file_name="widerspruch_begruendung.txt")
+                    else:
+                        st.warning("Bitte gib zuerst deine Gründe in das Textfeld ein.")
 
+    # =======================================================================
