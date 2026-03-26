@@ -268,19 +268,27 @@ else:
 
     # =======================================================================
     # NEU: TAB FÜR DEN INTERAKTIVEN PFLEGEGRAD-RECHNER
-    # =======================================================================
     with tab4:
-        st.header("Interaktiver Pflegegrad-Rechner")
-        st.info(
-            "Dies ist eine Live-Einbettung des Pflegegrad-Rechners von [pflegehilfe.org](https://www.pflegehilfe.org/). "
-            "Du kannst den Rechner direkt hier auf der Seite verwenden."
-        )
-
-        rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
-        
-        # Die iframe-Komponente, um die Webseite einzubetten
-        # height=800 sorgt dafür, dass die meiste Zeit nicht gescrollt werden muss
-        components.iframe(rechner_url, height=800, scrolling=True)
-
-        st.warning("Bitte beachte: Die Nutzung dieses Rechners unterliegt den Datenschutzbestimmungen und Nutzungsbedingungen von pflegehilfe.org.")
+            st.header("Pflegegrad-Rechner (Externer Service)")
+            st.warning(
+                "Der Pflegegrad-Rechner von pflegehilfe.org kann aus Sicherheitsgründen nicht direkt in diese App "
+                "eingebettet werden. Du kannst ihn aber über den folgenden Link in einem neuen Browser-Tab öffnen."
+            )
+    
+            rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
+    
+            # Ein großer, klickbarer Button/Link
+            st.markdown(f'''
+            <a href="{rechner_url}" target="_blank" style="display: inline-block; padding: 1em 2em; background-color: #0068c9; color: white; text-align: center; text-decoration: none; border-radius: 0.5rem; font-size: 1.1em; font-weight: bold; margin-top: 1em;">
+                Zum Pflegegrad-Rechner wechseln
+            </a>
+            ''', unsafe_allow_html=True)
+            
+            st.markdown("---")
+            st.info(
+                "**Anleitung:**\n"
+                "1. Klicke auf den Button, um den Rechner zu öffnen.\n"
+                "2. Fülle die Fragen auf der externen Seite aus.\n"
+                "3. Komm hierher zurück, um mit den Informationen weiterzuarbeiten."
+            )
     # =======================================================================
