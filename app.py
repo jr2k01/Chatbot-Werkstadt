@@ -244,7 +244,7 @@ else:
                     st.markdown(response)
             st.session_state.chat_history.append({"role": "assistant", "content": response})
 
-        with tab4:
+    with tab4:
             st.header("Pflegegrad-Rechner (Externer Service)")
             st.warning(
                 "Der Pflegegrad-Rechner von pflegehilfe.org kann aus Sicherheitsgründen nicht direkt in diese App "
@@ -268,72 +268,72 @@ else:
                 "3. Komm hierher zurück, um mit den Informationen weiterzuarbeiten."
             )
          
-        with tab5:
-                st.header("📝 Formulierungshilfe für deine Widerspruchsbegründung")
-                st.info("Nutze diese Bausteine und den Generator, um eine starke und persönliche Begründung zu erstellen.")
+    with tab5:
+            st.header("📝 Formulierungshilfe für deine Widerspruchsbegründung")
+            st.info("Nutze diese Bausteine und den Generator, um eine starke und persönliche Begründung zu erstellen.")
         
-                st.subheader("1. Vorlage für den fristwahrenden Widerspruch")
-                st.markdown("Dies ist der erste, kurze Widerspruch, den du sofort abschickst.")
+            st.subheader("1. Vorlage für den fristwahrenden Widerspruch")
+            st.markdown("Dies ist der erste, kurze Widerspruch, den du sofort abschickst.")
                 
-                frist_widerspruch_text = f"""
-                **[Dein Name]**
-                **[Deine Adresse]**
-                **[Deine Versichertennummer]**
+            frist_widerspruch_text = f"""
+            **[Dein Name]**
+            **[Deine Adresse]**
+            **[Deine Versichertennummer]**
         
-                An die
-                **[Name deiner Pflegekasse]**
-                **[Adresse deiner Pflegekasse]**
+            An die
+            **[Name deiner Pflegekasse]**
+            **[Adresse deiner Pflegekasse]**
         
-                **Datum: {datetime.date.today().strftime('%d.%m.%Y')}**
+            **Datum: {datetime.date.today().strftime('%d.%m.%Y')}**
         
-                **Betreff: Widerspruch gegen den Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}, Aktenzeichen/Versichertennummer: [Dein Aktenzeichen]**
+            **Betreff: Widerspruch gegen den Bescheid vom {st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}, Aktenzeichen/Versichertennummer: [Dein Aktenzeichen]**
         
-                Sehr geehrte Damen und Herren,
+            Sehr geehrte Damen und Herren,
         
-                hiermit lege ich gegen den oben genannten Bescheid fristwahrend Widerspruch ein.
+            hiermit lege ich gegen den oben genannten Bescheid fristwahrend Widerspruch ein.
         
-                Eine ausführliche Begründung werde ich Ihnen in Kürze nachreichen.
+            Eine ausführliche Begründung werde ich Ihnen in Kürze nachreichen.
         
-                Ich bitte um eine schriftliche Bestätigung über den Eingang dieses Widerspruchs.
+            Ich bitte um eine schriftliche Bestätigung über den Eingang dieses Widerspruchs.
         
-                Mit freundlichen Grüßen
+            Mit freundlichen Grüßen
         
         
-                ________________________
-                (Unterschrift)
-                """
-                st.code(frist_widerspruch_text, language="text")
-                st.download_button("Vorlage herunterladen (.txt)", frist_widerspruch_text, file_name="fristwahrender_widerspruch.txt")
+            ________________________
+            (Unterschrift)
+            """
+            st.code(frist_widerspruch_text, language="text")
+            st.download_button("Vorlage herunterladen (.txt)", frist_widerspruch_text, file_name="fristwahrender_widerspruch.txt")
                 
-                st.divider()
+            st.divider()
         
-                st.subheader("2. Generator für die ausführliche Begründung")
-                st.markdown("Beschreibe hier in Stichpunkten, was deiner Meinung nach im Gutachten falsch bewertet wurde. Der Generator erstellt daraus einen ausformulierten Text.")
+            st.subheader("2. Generator für die ausführliche Begründung")
+            st.markdown("Beschreibe hier in Stichpunkten, was deiner Meinung nach im Gutachten falsch bewertet wurde. Der Generator erstellt daraus einen ausformulierten Text.")
         
-                col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
         
-                with col1:
-                    st.markdown("**Beispiele für deine Stichpunkte:**")
-                    st.markdown(
-                        "- *Hilfe beim Anziehen wird täglich benötigt, nicht nur 2x pro Woche.*\n"
-                        "- *Treppensteigen ist ohne Hilfe gar nicht mehr möglich.*\n"
-                        "- *Nachts muss ich mehrmals auf die Toilette begleitet werden, das wurde nicht berücksichtigt.*\n"
-                        "- *Die psychische Belastung wurde ignoriert.*"
-                    )
+            with col1:
+                st.markdown("**Beispiele für deine Stichpunkte:**")
+                st.markdown(
+                     "- *Hilfe beim Anziehen wird täglich benötigt, nicht nur 2x pro Woche.*\n"
+                     "- *Treppensteigen ist ohne Hilfe gar nicht mehr möglich.*\n"
+                     "- *Nachts muss ich mehrmals auf die Toilette begleitet werden, das wurde nicht berücksichtigt.*\n"
+                     "- *Die psychische Belastung wurde ignoriert.*"
+                 )
         
-                with col2:
-                    user_reasons = st.text_area(
-                        "Deine Gründe in Stichpunkten (einer pro Zeile):",
-                        height=200,
-                        placeholder="z.B. Tägliche Hilfe beim Duschen nötig\nKann Mahlzeiten nicht selbst zubereiten\n..."
-                    )
+            with col2:
+                user_reasons = st.text_area(
+                    "Deine Gründe in Stichpunkten (einer pro Zeile):",
+                    height=200,
+                    placeholder="z.B. Tägliche Hilfe beim Duschen nötig\nKann Mahlzeiten nicht selbst zubereiten\n..."
+                )
         
-                if st.button("Begründungstext erstellen", type="primary"):
-                    if user_reasons:
-                        reasons_list = [f"- {reason.strip()}" for reason in user_reasons.split('\n') if reason.strip()]
-                        reasons_formatted = "\n".join(reasons_list)
+            if st.button("Begründungstext erstellen", type="primary"):
+                 if user_reasons:
+                    reasons_list = [f"- {reason.strip()}" for reason in user_reasons.split('\n') if reason.strip()]
+                    reasons_formatted = "\n".join(reasons_list)
         
-                        begruendung_text = f"""
+                    begruendung_text = f"""
                         **[Dein Name]**
                         **[Deine Adresse]**
         
