@@ -5,27 +5,17 @@ import os
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 import PyPDF2
-
-# NEUER Code für GitHub Secrets (und lokale Entwicklung, wenn Variable gesetzt)
-import os
-import streamlit as st # Streamlit muss für st.secrets importiert sein
+# NEU: Import für die iframe-Komponente, die wir für den Rechner brauchen
+import streamlit.components.v1 as components
 
 # --- 1. GRUNDEINSTELLUNGEN & INITIALISIERUNG ---
 
-# Versuche, den Schlüssel aus den Streamlit Secrets zu laden (für Deployment)
+# Lade den API-Schlüssel aus den Streamlit Secrets (für Deployment)
 api_key = st.secrets.get("MISTRAL_API_KEY")
 
-# Fallback auf Umgebungsvariablen (für GitHub Codespaces/Actions)
+# Fallback auf Umgebungsvariablen (für lokale Entwicklung)
 if not api_key:
     api_key = os.getenv("MISTRAL_API_KEY")
-
-# **WICHTIGE PRÜFUNG HINZUFÜGEN**
-if not api_key:
-    st.error("Mistral API-Schlüssel nicht gefunden! Bitte konfiguriere das 'MISTRAL_API_KEY' Secret in den Einstellungen deiner App.")
-    st.stop() # App anhalten, wenn kein Schlüssel da ist
-
-# Initialisiere den Mistral Client
-client = MistralClient(api_key=api_key)
 
 # Konfiguriere die Streamlit-Seite
 st.set_page_config(
@@ -34,8 +24,13 @@ st.set_page_config(
     layout="wide"
 )
 
+# Wichtige Prüfung, ob der API-Schlüssel vorhanden ist
+if not api_key:
+    st.error("Mistral API-Schlüssel nicht gefunden! Bitte konfiguriere das 'MISTRAL_API_KEY' Secret in den Einstellungen deiner App.")
+    st.stop() # App anhalten, wenn kein Schlüssel da ist
+
 # Initialisiere den Mistral AI Client
-model = "mistral-large-latest"  # Oder ein anderes Modell deiner Wahl
+model = "mistral-large-latest"
 client = MistralClient(api_key=api_key)
 
 
@@ -87,7 +82,7 @@ def ask_mistral(user_question, context=""):
     except Exception as e:
         return f"Ein Fehler ist bei der Kommunikation mit der KI aufgetreten: {e}"
 
-# --- 3. SESSION STATE INITIALISIERUNG (Daten zwischen Interaktionen speichern) ---
+# --- 3. SESSION STATE INITIALISIERUNG ---
 
 if 'process_started' not in st.session_state:
     st.session_state.process_started = False
@@ -103,34 +98,31 @@ if 'uploaded_docs' not in st.session_state:
 
 st.title("🛡️ Dein Assistent für den Pflegegrad-Widerspruch")
 
-# Definiere den CSS-Stil für den Hinweis-Banner
+# =======================================================================
+# NEU: DAUERHAFTER RECHTLICHER HINWEIS
+# =======================================================================
 st.markdown("""
 <style>
 .disclaimer-box {
-    background-color: #FFF3CD; /* Helle Warnfarbe, passend zum Bootstrap-Stil von Streamlit */
-    color: #664D03; /* Dunkler Text für Lesbarkeit */
+    background-color: #FFF3CD; /* Sanftes Gelb, passend zu Warnhinweisen */
+    color: #664D03;           /* Dunkler Text für Kontrast */
     border: 1px solid #FFECB5;
     border-radius: 0.5rem;
     padding: 1rem;
-    margin-bottom: 1.5rem; /* Abstand zum nächsten Element */
+    margin-bottom: 1.5rem;
     text-align: center;
     font-size: 0.9rem;
-}
-.disclaimer-box a {
-    color: #0d6efd; /* Standard-Linkfarbe für bessere Sichtbarkeit */
-    font-weight: bold;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Erstelle den Container und fülle ihn mit dem Hinweis
-with st.container():
-    st.markdown("""
-    <div class="disclaimer-box">
-        <strong>Wichtiger Hinweis:</strong> Dieser Assistent bietet allgemeine Informationen und Unterstützung. Er stellt <strong>keine Rechtsberatung</strong> dar und kann die individuelle Beratung durch einen Anwalt oder eine spezialisierte Beratungsstelle (z.B. VdK, SoVD) nicht ersetzen.
-    </div>
-    """, unsafe_allow_html=True)
-    
+st.markdown("""
+<div class="disclaimer-box">
+    <strong>Wichtiger Hinweis:</strong> Dieser Assistent bietet allgemeine Informationen und Unterstützung. Er stellt <strong>keine Rechtsberatung</strong> dar und kann eine individuelle Beratung durch einen Fachexperten (z.B. Anwalt, Pflegeberatung, Sozialverband) nicht ersetzen.
+</div>
+""", unsafe_allow_html=True)
+# =======================================================================
+
 st.markdown("Wir führen dich Schritt für Schritt durch den Prozess. Einfach, klar und strukturiert.")
 
 # --- ANSICHT 1: STARTBILDSCHIRM ---
@@ -138,14 +130,12 @@ if not st.session_state.process_started:
     st.header("Schritt 1: Prozess starten und Fristen setzen")
     st.info(
         "Der Widerspruch muss in der Regel **innerhalb eines Monats** nach Erhalt des "
-        "Ablehnungsbescheids bei der Pflegekasse eingehen. Trage hier das Datum ein, "
-        "an dem du den Bescheid erhalten hast."
+        "Ablehnungsbescheids bei der Pflegekasse eingehen. Trage hier das Datum ein."
     )
     
-    # Datumseingabe
     selected_date = st.date_input(
         "Datum des Ablehnungsbescheids:",
-        value=None, # Standardwert None, damit es klar ist, dass nichts ausgewählt wurde
+        value=None,
         min_value=datetime.date.today() - datetime.timedelta(days=365),
         max_value=datetime.date.today(),
         help="Wähle das Datum, an dem du den Brief von der Pflegekasse erhalten hast."
@@ -155,17 +145,16 @@ if not st.session_state.process_started:
         if selected_date:
             st.session_state.ablehnungsdatum = selected_date
             st.session_state.process_started = True
-            st.rerun() # Seite neu laden, um die Hauptansicht anzuzeigen
+            st.rerun()
         else:
             st.warning("Bitte wähle zuerst das Datum des Ablehnungsbescheids aus.")
 
 # --- ANSICHT 2: HAUPTANSICHT NACH PROZESSSTART ---
 else:
-    # --- Linke Seitenleiste für Navigation und Status ---
+    # --- Linke Seitenleiste ---
     with st.sidebar:
         st.header("Dein Status")
         
-        # Fristen anzeigen
         fristen = get_fristen_info(st.session_state.ablehnungsdatum)
         st.write(f"Bescheid vom: **{st.session_state.ablehnungsdatum.strftime('%d.%m.%Y')}**")
         
@@ -178,16 +167,11 @@ else:
                 delta=f"Frist endet am {widerspruchsfrist_ende.strftime('%d.%m.%Y')}",
                 delta_color="inverse" if tage_verbleibend > 10 else ("off" if tage_verbleibend <= 0 else "normal")
             )
-
         st.divider()
 
-        # Dokumenten-Upload
         st.header("Dokumente verwalten")
         uploaded_file = st.file_uploader(
-            "Lade Dokumente hoch (PDF)",
-            type="pdf",
-            accept_multiple_files=False, # Erstmal nur eine Datei zur Vereinfachung
-            key="file_uploader"
+            "Lade Dokumente hoch (PDF)", type="pdf", key="file_uploader"
         )
         if uploaded_file:
             if uploaded_file.name not in st.session_state.uploaded_docs:
@@ -196,7 +180,6 @@ else:
                     st.session_state.uploaded_docs[uploaded_file.name] = text
                     st.success(f"'{uploaded_file.name}' wurde erfolgreich geladen.")
         
-        # Anzeige der hochgeladenen Dokumente
         if st.session_state.uploaded_docs:
             st.write("Hochgeladene Dokumente:")
             for doc_name in st.session_state.uploaded_docs.keys():
@@ -204,101 +187,85 @@ else:
         
         st.divider()
         if st.button("Prozess neu starten"):
-            # Alle Session-Daten zurücksetzen
             for key in st.session_state.keys():
                 del st.session_state[key]
             st.rerun()
 
     # --- Hauptbereich mit Tabs ---
-    tab1, tab2, tab3 = st.tabs(["Schritt-für-Schritt Anleitung", "Kalender", "Chat-Assistent"])
+    # ANGEPASST: Vier Tabs, inklusive des Pflegegrad-Rechners
+    tab1, tab2, tab3, tab4 = st.tabs(["Schritt-für-Schritt", "Kalender", "Chat-Assistent", "Pflegegrad-Rechner"])
 
     with tab1:
         st.header("Schritt-für-Schritt durch den Widerspruch")
         st.markdown("""
-        Hier ist dein Fahrplan. Arbeite die Punkte nacheinander ab.
-        
+        Hier ist dein Fahrplan:
         - **Schritt 1: Fristwahrender Widerspruch (SOFORT)**
-          - **Was?** Ein kurzes Schreiben an die Pflegekasse, in dem du formlos mitteilst: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum des Bescheids] ein. Eine ausführliche Begründung reiche ich nach."
-          - **Warum?** Damit verpasst du die wichtige 1-Monats-Frist nicht!
-          - **Erledigt?**
-        
-        - **Schritt 2: Unterlagen sammeln (ca. 1-2 Wochen)**
-          - **Was?** Sammle alle relevanten Dokumente:
-            - Ärztliche Atteste, Berichte, Gutachten
-            - Pflegetagebuch (sehr wichtig!)
-            - Liste der benötigten Hilfsmittel
-          - **Tipp:** Lade die Dokumente hier in der App hoch, um sie vom Chatbot analysieren zu lassen.
-          - **Erledigt?**
-        
+          - **Was?** Kurzes Schreiben: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum] ein. Begründung folgt."
+        - **Schritt 2: Unterlagen sammeln (1-2 Wochen)**
+          - **Was?** Ärztliche Atteste, Berichte, Pflegetagebuch.
         - **Schritt 3: Begründung formulieren (ca. 1 Woche)**
-          - **Was?** Schreibe die ausführliche Begründung für deinen Widerspruch. Beschreibe genau, warum die Ablehnung oder die Einstufung falsch ist.
-          - **Hilfe:** Nutze den Chat-Assistenten! Frage z.B.: "Hilf mir, eine Begründung zu formulieren. Mein Pflegetagebuch zeigt, dass ich Hilfe beim Anziehen brauche."
-          - **Erledigt?**
-
+          - **Hilfe:** Nutze den Chat-Assistenten!
         - **Schritt 4: Begründung abschicken**
-          - **Was?** Schicke die ausführliche Begründung per Einschreiben an die Pflegekasse.
-          - **Wichtig:** Hebe den Sendebeleg gut auf!
-          - **Erledigt?**
+          - **Wichtig:** Per Einschreiben!
         """)
     
     with tab2:
         st.header("Dein Fristenkalender")
-        
-        # Kalender-Events erstellen
         calendar_events = []
+        fristen = get_fristen_info(st.session_state.ablehnungsdatum)
         for name, datum in fristen.items():
             calendar_events.append({
-                "title": name,
-                "start": datum.isoformat(),
-                "end": datum.isoformat(),
-                "allDay": True, # Ganztägiges Event
-                "color": "red" if "endet" in name else "orange"
+                "title": name, "start": datum.isoformat(), "end": datum.isoformat(),
+                "allDay": True, "color": "red" if "endet" in name else "orange"
             })
-            
         calendar_options = {
-            "headerToolbar": {
-                "left": "today prev,next",
-                "center": "title",
-                "right": "dayGridMonth,timeGridWeek"
-            },
+            "headerToolbar": {"left": "today prev,next", "center": "title", "right": "dayGridMonth,timeGridWeek"},
             "initialDate": st.session_state.ablehnungsdatum.isoformat(),
             "initialView": "dayGridMonth"
         }
-
-        # Kalender anzeigen
         calendar(events=calendar_events, options=calendar_options)
 
     with tab3:
         st.header("Dein persönlicher Chat-Assistent")
         st.info("Stelle hier deine Fragen zum Prozess oder zu deinen hochgeladenen Dokumenten.")
-
-        # Chat-Verlauf anzeigen
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
         
-        # Nutzereingabe
         prompt = st.chat_input("Deine Frage an den Assistenten...")
         if prompt:
-            # Eingabe des Nutzers zum Verlauf hinzufügen und anzeigen
             st.session_state.chat_history.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
-
-            # Kontext aus Dokumenten für die KI vorbereiten
+            
             context = ""
             if st.session_state.uploaded_docs:
                 context += "Folgende Dokumente wurden hochgeladen:\n"
                 for name, text in st.session_state.uploaded_docs.items():
-                    # Nur einen Ausschnitt des Textes verwenden, um das Token-Limit nicht zu sprengen
                     summary = (text[:2000] + '...') if len(text) > 2000 else text
                     context += f"\n--- Dokument: {name} ---\n{summary}\n"
             
-            # KI-Antwort generieren und anzeigen
             with st.chat_message("assistant"):
                 with st.spinner("Ich denke nach..."):
                     response = ask_mistral(prompt, context)
                     st.markdown(response)
-            
-            # KI-Antwort zum Verlauf hinzufügen
             st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+    # =======================================================================
+    # NEU: TAB FÜR DEN INTERAKTIVEN PFLEGEGRAD-RECHNER
+    # =======================================================================
+    with tab4:
+        st.header("Interaktiver Pflegegrad-Rechner")
+        st.info(
+            "Dies ist eine Live-Einbettung des Pflegegrad-Rechners von [pflegehilfe.org](https://www.pflegehilfe.org/). "
+            "Du kannst den Rechner direkt hier auf der Seite verwenden."
+        )
+
+        rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
+        
+        # Die iframe-Komponente, um die Webseite einzubetten
+        # height=800 sorgt dafür, dass die meiste Zeit nicht gescrollt werden muss
+        components.iframe(rechner_url, height=800, scrolling=True)
+
+        st.warning("Bitte beachte: Die Nutzung dieses Rechners unterliegt den Datenschutzbestimmungen und Nutzungsbedingungen von pflegehilfe.org.")
+    # =======================================================================
