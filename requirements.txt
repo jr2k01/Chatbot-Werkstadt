@@ -1,7 +1,9 @@
-streamlit
+streamlit==1.56.0
 streamlit-calendar
-mistralai==0.9.0 
+mistralai==2.4.2
 PyPDF2
 chromadb
 sentence-transformers
 langchain-text-splitters
+
+
