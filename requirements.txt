@@ -1,6 +1,6 @@
 streamlit
 streamlit-calendar
-mistralai
+mistralai>=1.0.0
 PyPDF2
 chromadb
 sentence-transformers
