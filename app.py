@@ -2,15 +2,13 @@ import streamlit as st
 from streamlit_calendar import calendar
 import datetime
 import os
-from mistralai import Mistral
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
 import PyPDF2
 import streamlit.components.v1 as components
-
-# NEU: Imports für Chunking und Embeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
-import chromadb
-from chromadb.config import Settings
+import numpy as np
+from typing import List, Dict
+import hashlib
 
 # --- 1. GRUNDEINSTELLUNGEN & INITIALISIERUNG ---
 
@@ -35,28 +33,164 @@ if not api_key:
 
 # Initialisiere den Mistral AI Client
 model = "mistral-large-latest"
-client = Mistral(api_key=api_key)
-
-# NEU: Initialisiere Embedding-Modell und Vektor-Datenbank
-@st.cache_resource
-def load_embedding_model():
-    """Lädt das Sentence-Transformer-Modell (wird gecacht)."""
-    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
-@st.cache_resource
-def init_vector_db():
-    """Initialisiert ChromaDB als Vektor-Datenbank."""
-    chroma_client = chromadb.Client(Settings(
-        anonymized_telemetry=False,
-        is_persistent=False
-    ))
-    return chroma_client
-
-embedding_model = load_embedding_model()
-chroma_client = init_vector_db()
+embedding_model = "mistral-embed"
+client = MistralClient(api_key=api_key)
 
 
-# --- 2. FUNKTIONEN FÜR DIE APP-LOGIK ---
+# --- 2. NEUE FUNKTIONEN FÜR CHUNKING UND EMBEDDINGS ---
+
+def create_text_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+    """
+    Teilt Text in überlappende Chunks auf.
+    
+    Args:
+        text: Der zu teilende Text
+        chunk_size: Maximale Größe eines Chunks in Zeichen
+        overlap: Überlappung zwischen Chunks in Zeichen
+    
+    Returns:
+        Liste von Text-Chunks
+    """
+    if not text or len(text) == 0:
+        return []
+    
+    chunks = []
+    start = 0
+    text_length = len(text)
+    
+    while start < text_length:
+        # Ende des aktuellen Chunks
+        end = start + chunk_size
+        
+        # Wenn wir nicht am Ende sind, versuche an einem Satzende zu trennen
+        if end < text_length:
+            # Suche nach dem letzten Punkt, Ausrufezeichen oder Fragezeichen
+            last_period = max(
+                text.rfind('.', start, end),
+                text.rfind('!', start, end),
+                text.rfind('?', start, end)
+            )
+            if last_period != -1 and last_period > start:
+                end = last_period + 1
+        
+        # Chunk extrahieren
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        
+        # Nächsten Start mit Überlappung setzen
+        start = end - overlap if end < text_length else text_length
+    
+    return chunks
+
+def get_embeddings(texts: List[str]) -> List[List[float]]:
+    """
+    Erstellt Embeddings für eine Liste von Texten.
+    
+    Args:
+        texts: Liste von Texten
+    
+    Returns:
+        Liste von Embedding-Vektoren
+    """
+    try:
+        embeddings_response = client.embeddings(
+            model=embedding_model,
+            input=texts
+        )
+        return [data.embedding for data in embeddings_response.data]
+    except Exception as e:
+        st.error(f"Fehler beim Erstellen der Embeddings: {e}")
+        return []
+
+def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    """Berechnet die Kosinus-Ähnlichkeit zwischen zwei Vektoren."""
+    vec1_array = np.array(vec1)
+    vec2_array = np.array(vec2)
+    
+    dot_product = np.dot(vec1_array, vec2_array)
+    norm1 = np.linalg.norm(vec1_array)
+    norm2 = np.linalg.norm(vec2_array)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    return dot_product / (norm1 * norm2)
+
+def find_relevant_chunks(query: str, chunks_data: List[Dict], top_k: int = 3) -> List[Dict]:
+    """
+    Findet die relevantesten Chunks für eine Anfrage.
+    
+    Args:
+        query: Die Suchanfrage
+        chunks_data: Liste von Dictionaries mit 'text' und 'embedding'
+        top_k: Anzahl der zurückzugebenden Top-Ergebnisse
+    
+    Returns:
+        Liste der relevantesten Chunks mit Ähnlichkeitsscore
+    """
+    if not chunks_data:
+        return []
+    
+    # Embedding für die Anfrage erstellen
+    query_embeddings = get_embeddings([query])
+    if not query_embeddings:
+        return []
+    
+    query_embedding = query_embeddings[0]
+    
+    # Ähnlichkeiten berechnen
+    similarities = []
+    for chunk_data in chunks_data:
+        similarity = cosine_similarity(query_embedding, chunk_data['embedding'])
+        similarities.append({
+            'text': chunk_data['text'],
+            'similarity': similarity,
+            'doc_name': chunk_data['doc_name']
+        })
+    
+    # Nach Ähnlichkeit sortieren und Top-K zurückgeben
+    similarities.sort(key=lambda x: x['similarity'], reverse=True)
+    return similarities[:top_k]
+
+def process_document_with_embeddings(text: str, doc_name: str) -> List[Dict]:
+    """
+    Verarbeitet ein Dokument: Chunking + Embeddings.
+    
+    Args:
+        text: Dokumenttext
+        doc_name: Name des Dokuments
+    
+    Returns:
+        Liste von Dictionaries mit Chunks und ihren Embeddings
+    """
+    # Text in Chunks aufteilen
+    chunks = create_text_chunks(text, chunk_size=1000, overlap=200)
+    
+    if not chunks:
+        return []
+    
+    # Embeddings für alle Chunks erstellen
+    with st.spinner(f"Erstelle Embeddings für {len(chunks)} Chunks..."):
+        embeddings = get_embeddings(chunks)
+    
+    if not embeddings:
+        return []
+    
+    # Chunks mit Embeddings kombinieren
+    chunks_data = []
+    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        chunks_data.append({
+            'text': chunk,
+            'embedding': embedding,
+            'doc_name': doc_name,
+            'chunk_id': i
+        })
+    
+    return chunks_data
+
+
+# --- 3. URSPRÜNGLICHE FUNKTIONEN (AKTUALISIERT) ---
 
 def get_fristen_info(ablehnungsdatum):
     """Berechnet wichtige Fristen basierend auf dem Ablehnungsdatum."""
@@ -80,77 +214,7 @@ def read_pdf(file):
     except Exception as e:
         return f"Fehler beim Lesen der PDF-Datei: {e}"
 
-def chunk_text(text, chunk_size=500, chunk_overlap=50):
-    """Teilt Text in kleinere Chunks auf."""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=len,
-        separators=["\n\n", "\n", ". ", " ", ""]
-    )
-    chunks = text_splitter.split_text(text)
-    return chunks
-
-def create_embeddings(chunks):
-    """Erstellt Embeddings für die Text-Chunks."""
-    embeddings = embedding_model.encode(chunks, show_progress_bar=False)
-    return embeddings.tolist()
-
-def store_chunks_in_vectordb(doc_name, chunks, embeddings):
-    """Speichert Chunks und ihre Embeddings in ChromaDB."""
-    collection_name = "documents"
-    
-    try:
-        collection = chroma_client.get_collection(collection_name)
-    except:
-        collection = chroma_client.create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"}
-        )
-    
-    st.session_state.vector_collection = collection
-    
-    ids = [f"{doc_name}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [{"source": doc_name, "chunk_id": i} for i in range(len(chunks))]
-    
-    collection.add(
-        ids=ids,
-        embeddings=embeddings,
-        documents=chunks,
-        metadatas=metadatas
-    )
-    
-    return collection
-
-def semantic_search(query, top_k=3):
-    """Führt eine semantische Suche in den gespeicherten Dokumenten durch."""
-    if st.session_state.vector_collection is None:
-        return []
-    
-    query_embedding = embedding_model.encode([query])[0].tolist()
-    
-    results = st.session_state.vector_collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k
-    )
-    
-    return results
-
-def process_document(file):
-    """Vollständige Verarbeitung eines Dokuments: Lesen, Chunking, Embeddings."""
-    text = read_pdf(file)
-    
-    if text.startswith("Fehler"):
-        return text, [], 0
-    
-    chunks = chunk_text(text, chunk_size=500, chunk_overlap=50)
-    embeddings = create_embeddings(chunks)
-    store_chunks_in_vectordb(file.name, chunks, embeddings)
-    st.session_state.doc_chunks[file.name] = chunks
-    
-    return text, chunks, len(chunks)
-
-def ask_mistral(user_question, use_semantic_search=True):
+def ask_mistral(user_question, context=""):
     """Sendet eine Frage an die Mistral AI und gibt die Antwort zurück."""
     system_prompt = (
         "Du bist ein hilfreicher und einfühlsamer KI-Assistent. Deine Aufgabe ist es, "
@@ -160,33 +224,22 @@ def ask_mistral(user_question, use_semantic_search=True):
         "beziehe dich klar darauf und zitiere relevante Stellen."
     )
     
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    context = ""
-    
-    if use_semantic_search and st.session_state.vector_collection is not None:
-        search_results = semantic_search(user_question, top_k=3)
-        
-        if search_results and search_results['documents']:
-            context = "Relevante Informationen aus deinen Dokumenten:\n\n"
-            for i, (doc, metadata) in enumerate(zip(search_results['documents'][0], 
-                                                     search_results['metadatas'][0])):
-                context += f"[Aus {metadata['source']}]:\n{doc}\n\n"
+    messages = [ChatMessage(role="system", content=system_prompt)]
     
     if context:
-        full_question = f"{context}\n---\nFrage des Nutzers: {user_question}"
-        messages.append({"role": "user", "content": full_question})
+        full_question = f"Basierend auf den folgenden relevanten Dokumentausschnitten:\n\n{context}\n\nBeantworte diese Frage: {user_question}"
+        messages.append(ChatMessage(role="user", content=full_question))
     else:
-        messages.append({"role": "user", "content": full_question})
+        messages.append(ChatMessage(role="user", content=user_question))
 
     try:
-        chat_response = client.chat.complete(model=model, messages=messages)
+        chat_response = client.chat(model=model, messages=messages)
         return chat_response.choices[0].message.content
     except Exception as e:
         return f"Ein Fehler ist bei der Kommunikation mit der KI aufgetreten: {e}"
 
 
-# --- 3. SESSION STATE INITIALISIERUNG ---
+# --- 4. SESSION STATE INITIALISIERUNG ---
 
 if 'process_started' not in st.session_state:
     st.session_state.process_started = False
@@ -196,16 +249,16 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'uploaded_docs' not in st.session_state:
     st.session_state.uploaded_docs = {}
-if 'vector_collection' not in st.session_state:
-    st.session_state.vector_collection = None
-if 'doc_chunks' not in st.session_state:
-    st.session_state.doc_chunks = {}
+# NEU: Speicher für Chunks mit Embeddings
+if 'document_chunks' not in st.session_state:
+    st.session_state.document_chunks = []
 
 
-# --- 4. AUFBAU DER STREAMLIT-OBERFLÄCHE ---
+# --- 5. AUFBAU DER STREAMLIT-OBERFLÄCHE ---
 
 st.title("🛡️ Dein Assistent für den Pflegegrad-Widerspruch")
 
+# Rechtlicher Hinweis
 st.markdown("""
 <style>
 .disclaimer-box {
@@ -253,7 +306,9 @@ if not st.session_state.process_started:
         else:
             st.warning("Bitte wähle zuerst das Datum des Ablehnungsbescheids aus.")
 
+# --- ANSICHT 2: HAUPTANSICHT NACH PROZESSSTART ---
 else:
+    # --- Linke Seitenleiste ---
     with st.sidebar:
         st.header("Dein Status")
         
@@ -272,6 +327,8 @@ else:
         st.divider()
 
         st.header("Dokumente verwalten")
+        st.info("📊 Dokumente werden mit KI-Embeddings verarbeitet für bessere Suche")
+        
         uploaded_file = st.file_uploader(
             "Lade Dokumente hoch (PDF)", type="pdf", key="file_uploader"
         )
@@ -279,40 +336,50 @@ else:
         if uploaded_file:
             if uploaded_file.name not in st.session_state.uploaded_docs:
                 with st.spinner(f"Verarbeite '{uploaded_file.name}'..."):
-                    progress_text = st.empty()
-                    
-                    progress_text.text("📄 Lese PDF...")
-                    text, chunks, num_chunks = process_document(uploaded_file)
+                    # PDF lesen
+                    text = read_pdf(uploaded_file)
                     
                     if not text.startswith("Fehler"):
+                        # Text speichern
                         st.session_state.uploaded_docs[uploaded_file.name] = text
                         
-                        progress_text.text(f"✅ Fertig! {num_chunks} Chunks erstellt.")
-                        st.success(
-                            f"'{uploaded_file.name}' wurde erfolgreich verarbeitet.\n\n"
-                            f"📊 Statistik: {len(text)} Zeichen, {num_chunks} Chunks"
-                        )
+                        # Chunking und Embeddings erstellen
+                        chunks_data = process_document_with_embeddings(text, uploaded_file.name)
+                        
+                        if chunks_data:
+                            st.session_state.document_chunks.extend(chunks_data)
+                            st.success(f"✅ '{uploaded_file.name}' verarbeitet: {len(chunks_data)} Chunks erstellt")
+                        else:
+                            st.warning(f"⚠️ '{uploaded_file.name}' hochgeladen, aber keine Chunks erstellt")
                     else:
                         st.error(text)
         
+        # Dokumentenübersicht
         if st.session_state.uploaded_docs:
             st.write("**Hochgeladene Dokumente:**")
+            
+            # Zähle Chunks pro Dokument
+            doc_chunk_counts = {}
+            for chunk in st.session_state.document_chunks:
+                doc_name = chunk['doc_name']
+                doc_chunk_counts[doc_name] = doc_chunk_counts.get(doc_name, 0) + 1
+            
             for doc_name in st.session_state.uploaded_docs.keys():
-                num_chunks = len(st.session_state.doc_chunks.get(doc_name, []))
-                with st.expander(f"📄 {doc_name}"):
-                    st.write(f"Anzahl Chunks: {num_chunks}")
-                    if st.button(f"Chunks anzeigen", key=f"show_{doc_name}"):
-                        for i, chunk in enumerate(st.session_state.doc_chunks.get(doc_name, [])[:5]):
-                            st.text_area(f"Chunk {i+1}", chunk, height=100, key=f"chunk_{doc_name}_{i}")
-                        if num_chunks > 5:
-                            st.info(f"... und {num_chunks - 5} weitere Chunks")
+                chunk_count = doc_chunk_counts.get(doc_name, 0)
+                st.info(f"📄 {doc_name}\n({chunk_count} Chunks)")
+        
+        # Statistiken
+        if st.session_state.document_chunks:
+            st.divider()
+            st.metric("Gesamt-Chunks", len(st.session_state.document_chunks))
         
         st.divider()
         if st.button("Prozess neu starten"):
-            for key in list(st.session_state.keys()):
+            for key in st.session_state.keys():
                 del st.session_state[key]
             st.rerun()
 
+    # --- Hauptbereich mit Tabs ---
     tab1, tab2, tab3, tab4 = st.tabs(["Schritt-für-Schritt", "Kalender", "Chat-Assistent", "Pflegegrad-Rechner"])
 
     with tab1:
@@ -320,28 +387,28 @@ else:
         st.markdown("""
         Hier ist dein Fahrplan. Arbeite die Punkte nacheinander ab.
         
-        ### Schritt 1: Fristwahrender Widerspruch (SOFORT)
+        - **Schritt 1: Fristwahrender Widerspruch (SOFORT)**
         - **Was?** Ein kurzes Schreiben an die Pflegekasse, in dem du formlos mitteilst: "Hiermit lege ich Widerspruch gegen den Bescheid vom [Datum des Bescheids] ein. Eine ausführliche Begründung reiche ich nach."
         - **Warum?** Damit verpasst du die wichtige 1-Monats-Frist nicht!
-        - **Erledigt?** ☐
+        - **Erledigt?**
             
-        ### Schritt 2: Unterlagen sammeln (ca. 1-2 Wochen)
+        - **Schritt 2: Unterlagen sammeln (ca. 1-2 Wochen)**
         - **Was?** Sammle alle relevanten Dokumente:
-            - Ärztliche Atteste, Berichte, Gutachten
-            - Pflegetagebuch (sehr wichtig!)
-            - Liste der benötigten Hilfsmittel
+        - Ärztliche Atteste, Berichte, Gutachten
+        - Pflegetagebuch (sehr wichtig!)
+        - Liste der benötigten Hilfsmittel
         - **Tipp:** Lade die Dokumente hier in der App hoch, um sie vom Chatbot analysieren zu lassen.
-        - **Erledigt?** ☐
+        - **Erledigt?**
             
-        ### Schritt 3: Begründung formulieren (ca. 1 Woche)
+        - **Schritt 3: Begründung formulieren (ca. 1 Woche)**
         - **Was?** Schreibe die ausführliche Begründung für deinen Widerspruch. Beschreibe genau, warum die Ablehnung oder die Einstufung falsch ist.
         - **Hilfe:** Nutze den Chat-Assistenten! Frage z.B.: "Hilf mir, eine Begründung zu formulieren. Mein Pflegetagebuch zeigt, dass ich Hilfe beim Anziehen brauche."
-        - **Erledigt?** ☐
+        - **Erledigt?**
     
-        ### Schritt 4: Begründung abschicken
+        - **Schritt 4: Begründung abschicken**
         - **Was?** Schicke die ausführliche Begründung per Einschreiben an die Pflegekasse.
         - **Wichtig:** Hebe den Sendebeleg gut auf!
-        - **Erledigt?** ☐
+        - **Erledigt?**
         """)
     
     with tab2:
@@ -350,18 +417,11 @@ else:
         fristen = get_fristen_info(st.session_state.ablehnungsdatum)
         for name, datum in fristen.items():
             calendar_events.append({
-                "title": name, 
-                "start": datum.isoformat(), 
-                "end": datum.isoformat(),
-                "allDay": True, 
-                "color": "red" if "endet" in name else "orange"
+                "title": name, "start": datum.isoformat(), "end": datum.isoformat(),
+                "allDay": True, "color": "red" if "endet" in name else "orange"
             })
         calendar_options = {
-            "headerToolbar": {
-                "left": "today prev,next", 
-                "center": "title", 
-                "right": "dayGridMonth,timeGridWeek"
-            },
+            "headerToolbar": {"left": "today prev,next", "center": "title", "right": "dayGridMonth,timeGridWeek"},
             "initialDate": st.session_state.ablehnungsdatum.isoformat(),
             "initialView": "dayGridMonth"
         }
@@ -369,31 +429,64 @@ else:
 
     with tab3:
         st.header("Dein persönlicher Chat-Assistent")
+        st.info("💡 Stelle hier deine Fragen. Die KI durchsucht automatisch deine hochgeladenen Dokumente nach relevanten Informationen!")
         
-        if st.session_state.uploaded_docs:
-            st.success(
-                f"🔍 Semantische Suche aktiv! Ich durchsuche {len(st.session_state.uploaded_docs)} "
-                f"Dokument(e) nach relevanten Informationen zu deiner Frage."
-            )
-        else:
-            st.info("Stelle hier deine Fragen zum Prozess. Lade Dokumente hoch für dokumentenspezifische Antworten.")
-        
+        # Chat-Historie anzeigen
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+                # Zeige verwendete Quellen, falls vorhanden
+                if message["role"] == "assistant" and "sources" in message:
+                    with st.expander("📚 Verwendete Quellen"):
+                        for source in message["sources"]:
+                            st.caption(f"**{source['doc_name']}** (Relevanz: {source['similarity']:.2%})")
+                            st.text(source['text'][:300] + "...")
         
+        # Chat-Eingabe
         prompt = st.chat_input("Deine Frage an den Assistenten...")
         if prompt:
+            # Benutzernachricht hinzufügen
             st.session_state.chat_history.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
             
-            with st.chat_message("assistant"):
-                with st.spinner("Ich durchsuche die Dokumente und denke nach..."):
-                    response = ask_mistral(prompt, use_semantic_search=True)
-                    st.markdown(response)
+            # Relevante Chunks finden (wenn Dokumente vorhanden)
+            context = ""
+            sources = []
             
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
+            if st.session_state.document_chunks:
+                with st.spinner("Durchsuche Dokumente..."):
+                    relevant_chunks = find_relevant_chunks(
+                        prompt, 
+                        st.session_state.document_chunks, 
+                        top_k=3
+                    )
+                    
+                    if relevant_chunks:
+                        context = "Relevante Informationen aus deinen Dokumenten:\n\n"
+                        for i, chunk in enumerate(relevant_chunks, 1):
+                            context += f"[Quelle {i} - {chunk['doc_name']} (Relevanz: {chunk['similarity']:.2%})]:\n{chunk['text']}\n\n"
+                            sources.append(chunk)
+            
+            # Antwort generieren
+            with st.chat_message("assistant"):
+                with st.spinner("Ich denke nach..."):
+                    response = ask_mistral(prompt, context)
+                    st.markdown(response)
+                    
+                    # Quellen anzeigen
+                    if sources:
+                        with st.expander("📚 Verwendete Quellen"):
+                            for source in sources:
+                                st.caption(f"**{source['doc_name']}** (Relevanz: {source['similarity']:.2%})")
+                                st.text(source['text'][:300] + "...")
+            
+            # Antwort zur Historie hinzufügen
+            st.session_state.chat_history.append({
+                "role": "assistant", 
+                "content": response,
+                "sources": sources
+            })
 
     with tab4:
         st.header("Pflegegrad-Rechner (Externer Service)")
