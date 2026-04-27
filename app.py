@@ -2,8 +2,7 @@ import streamlit as st
 from streamlit_calendar import calendar
 import datetime
 import os
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai import Mistral
 import PyPDF2
 import streamlit.components.v1 as components
 
@@ -36,7 +35,7 @@ if not api_key:
 
 # Initialisiere den Mistral AI Client
 model = "mistral-large-latest"
-client = MistralClient(api_key=api_key)
+client = Mistral(api_key=api_key)
 
 # NEU: Initialisiere Embedding-Modell und Vektor-Datenbank
 @st.cache_resource
@@ -161,7 +160,7 @@ def ask_mistral(user_question, use_semantic_search=True):
         "beziehe dich klar darauf und zitiere relevante Stellen."
     )
     
-    messages = [ChatMessage(role="system", content=system_prompt)]
+    messages = [{"role": "system", "content": system_prompt}]
     
     context = ""
     
@@ -176,12 +175,12 @@ def ask_mistral(user_question, use_semantic_search=True):
     
     if context:
         full_question = f"{context}\n---\nFrage des Nutzers: {user_question}"
-        messages.append(ChatMessage(role="user", content=full_question))
+        messages.append({"role": "user", "content": full_question})
     else:
-        messages.append(ChatMessage(role="user", content=user_question))
+        messages.append({"role": "user", "content": full_question})
 
     try:
-        chat_response = client.chat(model=model, messages=messages)
+        chat_response = client.chat.complete(model=model, messages=messages)
         return chat_response.choices[0].message.content
     except Exception as e:
         return f"Ein Fehler ist bei der Kommunikation mit der KI aufgetreten: {e}"
