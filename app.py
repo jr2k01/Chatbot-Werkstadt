@@ -2,7 +2,8 @@ import streamlit as st
 from streamlit_calendar import calendar
 import datetime
 import os
-from mistralai import Mistral
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
 import PyPDF2
 import streamlit.components.v1 as components
 
@@ -11,7 +12,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
-import hashlib
 
 # --- 1. GRUNDEINSTELLUNGEN & INITIALISIERUNG ---
 
@@ -32,11 +32,11 @@ st.set_page_config(
 # Wichtige Prüfung, ob der API-Schlüssel vorhanden ist
 if not api_key:
     st.error("Mistral API-Schlüssel nicht gefunden! Bitte konfiguriere das 'MISTRAL_API_KEY' Secret in den Einstellungen deiner App.")
-    st.stop() # App anhalten, wenn kein Schlüssel da ist
+    st.stop()
 
 # Initialisiere den Mistral AI Client
 model = "mistral-large-latest"
-client = Mistral(api_key=api_key)
+client = MistralClient(api_key=api_key)
 
 # NEU: Initialisiere Embedding-Modell und Vektor-Datenbank
 @st.cache_resource
@@ -82,17 +82,7 @@ def read_pdf(file):
         return f"Fehler beim Lesen der PDF-Datei: {e}"
 
 def chunk_text(text, chunk_size=500, chunk_overlap=50):
-    """
-    Teilt Text in kleinere Chunks auf.
-    
-    Args:
-        text: Der zu teilende Text
-        chunk_size: Maximale Größe eines Chunks in Zeichen
-        chunk_overlap: Überlappung zwischen Chunks
-    
-    Returns:
-        Liste von Text-Chunks
-    """
+    """Teilt Text in kleinere Chunks auf."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -103,28 +93,12 @@ def chunk_text(text, chunk_size=500, chunk_overlap=50):
     return chunks
 
 def create_embeddings(chunks):
-    """
-    Erstellt Embeddings für die Text-Chunks.
-    
-    Args:
-        chunks: Liste von Text-Strings
-    
-    Returns:
-        Liste von Embedding-Vektoren
-    """
+    """Erstellt Embeddings für die Text-Chunks."""
     embeddings = embedding_model.encode(chunks, show_progress_bar=False)
     return embeddings.tolist()
 
 def store_chunks_in_vectordb(doc_name, chunks, embeddings):
-    """
-    Speichert Chunks und ihre Embeddings in ChromaDB.
-    
-    Args:
-        doc_name: Name des Dokuments
-        chunks: Liste der Text-Chunks
-        embeddings: Liste der Embedding-Vektoren
-    """
-    # Erstelle oder hole Collection
+    """Speichert Chunks und ihre Embeddings in ChromaDB."""
     collection_name = "documents"
     
     try:
@@ -137,13 +111,9 @@ def store_chunks_in_vectordb(doc_name, chunks, embeddings):
     
     st.session_state.vector_collection = collection
     
-    # Erstelle IDs für die Chunks
     ids = [f"{doc_name}_chunk_{i}" for i in range(len(chunks))]
-    
-    # Metadaten für jeden Chunk
     metadatas = [{"source": doc_name, "chunk_id": i} for i in range(len(chunks))]
     
-    # Speichere in der Datenbank
     collection.add(
         ids=ids,
         embeddings=embeddings,
@@ -154,23 +124,12 @@ def store_chunks_in_vectordb(doc_name, chunks, embeddings):
     return collection
 
 def semantic_search(query, top_k=3):
-    """
-    Führt eine semantische Suche in den gespeicherten Dokumenten durch.
-    
-    Args:
-        query: Die Suchanfrage
-        top_k: Anzahl der zurückzugebenden relevantesten Chunks
-    
-    Returns:
-        Liste der relevantesten Text-Chunks mit Metadaten
-    """
+    """Führt eine semantische Suche in den gespeicherten Dokumenten durch."""
     if st.session_state.vector_collection is None:
         return []
     
-    # Erstelle Embedding für die Query
     query_embedding = embedding_model.encode([query])[0].tolist()
     
-    # Suche in der Vektor-Datenbank
     results = st.session_state.vector_collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k
@@ -179,36 +138,21 @@ def semantic_search(query, top_k=3):
     return results
 
 def process_document(file):
-    """
-    Vollständige Verarbeitung eines Dokuments: Lesen, Chunking, Embeddings.
-    
-    Args:
-        file: Hochgeladene Datei
-    
-    Returns:
-        Tuple: (original_text, chunks, anzahl_chunks)
-    """
-    # 1. Text extrahieren
+    """Vollständige Verarbeitung eines Dokuments: Lesen, Chunking, Embeddings."""
     text = read_pdf(file)
     
     if text.startswith("Fehler"):
         return text, [], 0
     
-    # 2. Text in Chunks aufteilen
     chunks = chunk_text(text, chunk_size=500, chunk_overlap=50)
-    
-    # 3. Embeddings erstellen
     embeddings = create_embeddings(chunks)
-    
-    # 4. In Vektor-Datenbank speichern
     store_chunks_in_vectordb(file.name, chunks, embeddings)
-    
-    # 5. Chunks für spätere Anzeige speichern
     st.session_state.doc_chunks[file.name] = chunks
     
     return text, chunks, len(chunks)
 
 def ask_mistral(user_question, use_semantic_search=True):
+    """Sendet eine Frage an die Mistral AI und gibt die Antwort zurück."""
     system_prompt = (
         "Du bist ein hilfreicher und einfühlsamer KI-Assistent. Deine Aufgabe ist es, "
         "Nutzer durch den Widerspruchsprozess für einen Pflegegrad in Deutschland zu führen. "
@@ -217,11 +161,10 @@ def ask_mistral(user_question, use_semantic_search=True):
         "beziehe dich klar darauf und zitiere relevante Stellen."
     )
     
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = [ChatMessage(role="system", content=system_prompt)]
     
     context = ""
     
-    # NEU: Nutze semantische Suche für relevanten Kontext
     if use_semantic_search and st.session_state.vector_collection is not None:
         search_results = semantic_search(user_question, top_k=3)
         
@@ -233,18 +176,16 @@ def ask_mistral(user_question, use_semantic_search=True):
     
     if context:
         full_question = f"{context}\n---\nFrage des Nutzers: {user_question}"
-        messages.append({"role": "user", "content": full_question})
+        messages.append(ChatMessage(role="user", content=full_question))
     else:
-        messages.append({"role": "user", "content": user_question})
+        messages.append(ChatMessage(role="user", content=user_question))
 
     try:
-        chat_response = client.chat.complete(
-            model=model, 
-            messages=messages
-        )
+        chat_response = client.chat(model=model, messages=messages)
         return chat_response.choices[0].message.content
     except Exception as e:
         return f"Ein Fehler ist bei der Kommunikation mit der KI aufgetreten: {e}"
+
 
 # --- 3. SESSION STATE INITIALISIERUNG ---
 
@@ -256,7 +197,6 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'uploaded_docs' not in st.session_state:
     st.session_state.uploaded_docs = {}
-# NEU: Für Vektor-Datenbank
 if 'vector_collection' not in st.session_state:
     st.session_state.vector_collection = None
 if 'doc_chunks' not in st.session_state:
@@ -267,14 +207,11 @@ if 'doc_chunks' not in st.session_state:
 
 st.title("🛡️ Dein Assistent für den Pflegegrad-Widerspruch")
 
-# =======================================================================
-# DAUERHAFTER RECHTLICHER HINWEIS
-# =======================================================================
 st.markdown("""
 <style>
 .disclaimer-box {
-    background-color: #FFF3CD; /* Sanftes Gelb, passend zu Warnhinweisen */
-    color: #664D03;           /* Dunkler Text für Kontrast */
+    background-color: #FFF3CD;
+    color: #664D03;
     border: 1px solid #FFECB5;
     border-radius: 0.5rem;
     padding: 1rem;
@@ -290,7 +227,6 @@ st.markdown("""
     <strong>Wichtiger Hinweis:</strong> Dieser Assistent bietet allgemeine Informationen und Unterstützung. Er stellt <strong>keine Rechtsberatung</strong> dar und kann eine individuelle Beratung durch einen Fachexperten (z.B. Anwalt, Pflegeberatung, Sozialverband) nicht ersetzen.
 </div>
 """, unsafe_allow_html=True)
-# =======================================================================
 
 st.markdown("Wir führen dich Schritt für Schritt durch den Prozess. Einfach, klar und strukturiert.")
 
@@ -318,9 +254,7 @@ if not st.session_state.process_started:
         else:
             st.warning("Bitte wähle zuerst das Datum des Ablehnungsbescheids aus.")
 
-# --- ANSICHT 2: HAUPTANSICHT NACH PROZESSSTART ---
 else:
-    # --- Linke Seitenleiste ---
     with st.sidebar:
         st.header("Dein Status")
         
@@ -346,7 +280,6 @@ else:
         if uploaded_file:
             if uploaded_file.name not in st.session_state.uploaded_docs:
                 with st.spinner(f"Verarbeite '{uploaded_file.name}'..."):
-                    # Fortschrittsanzeige
                     progress_text = st.empty()
                     
                     progress_text.text("📄 Lese PDF...")
@@ -381,7 +314,6 @@ else:
                 del st.session_state[key]
             st.rerun()
 
-    # --- Hauptbereich mit Tabs ---
     tab1, tab2, tab3, tab4 = st.tabs(["Schritt-für-Schritt", "Kalender", "Chat-Assistent", "Pflegegrad-Rechner"])
 
     with tab1:
@@ -439,7 +371,6 @@ else:
     with tab3:
         st.header("Dein persönlicher Chat-Assistent")
         
-        # NEU: Info-Box über semantische Suche
         if st.session_state.uploaded_docs:
             st.success(
                 f"🔍 Semantische Suche aktiv! Ich durchsuche {len(st.session_state.uploaded_docs)} "
@@ -448,23 +379,18 @@ else:
         else:
             st.info("Stelle hier deine Fragen zum Prozess. Lade Dokumente hoch für dokumentenspezifische Antworten.")
         
-        # Chat-Historie anzeigen
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
         
-        # Neuer Chat-Input
         prompt = st.chat_input("Deine Frage an den Assistenten...")
         if prompt:
-            # Nutzerfrage hinzufügen
             st.session_state.chat_history.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
             
-            # Antwort generieren
             with st.chat_message("assistant"):
                 with st.spinner("Ich durchsuche die Dokumente und denke nach..."):
-                    # Nutze die neue semantische Suche
                     response = ask_mistral(prompt, use_semantic_search=True)
                     st.markdown(response)
             
@@ -479,7 +405,6 @@ else:
 
         rechner_url = "https://www.pflegehilfe.org/service/pflegegrad-rechner/modul/1"
 
-        # Ein großer, klickbarer Button/Link
         st.markdown(f'''
         <a href="{rechner_url}" target="_blank" style="display: inline-block; padding: 1em 2em; background-color: #0068c9; color: white; text-align: center; text-decoration: none; border-radius: 0.5rem; font-size: 1.1em; font-weight: bold; margin-top: 1em;">
             Zum Pflegegrad-Rechner wechseln
