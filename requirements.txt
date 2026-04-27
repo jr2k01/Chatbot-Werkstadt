@@ -2,3 +2,8 @@ streamlit
 mistralai==0.1.8
 pypdf2==3.0.1
 streamlit-calendar==0.4.0
+PyPDF2
+chromadb
+sentence-transformers
+langchain-text-splitters
+torch
